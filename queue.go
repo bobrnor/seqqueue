@@ -10,34 +10,33 @@ type Queue struct {
 	nextSeq           uint64
 	unacknowledgedSeq uint64
 	entries           []*Entry
+
+	in  chan interface{}
+	out chan *Entry
 }
 
-func (q *Queue) Push(i interface{}) {
-	q.Lock()
-	defer q.Unlock()
-
-	e := Entry{
-		Seq:   q.nextSeq,
-		Value: i,
+func NewQueue() *Queue {
+	q := Queue{
+		entries: []*Entry{},
+		in:      make(chan interface{}),
+		out:     make(chan *Entry),
 	}
-	q.nextSeq++
-	q.entries = append(q.entries, &e)
+	go q.loop()
+	return &q
 }
 
-func (q *Queue) Pop(seq uint64) (*Entry, bool) {
-	q.Lock()
-	defer q.Unlock()
+func (q *Queue) Dispose() {
+	close(q.in)
+}
 
+func (q *Queue) In() chan interface{} {
+	return q.in
+}
+
+func (q *Queue) Out(seq uint64) <-chan *Entry {
 	q.ack(seq)
-
-	if len(q.entries) > 0 {
-		entry := q.entries[0]
-		if entry.Seq+1 > q.unacknowledgedSeq {
-			q.unacknowledgedSeq = entry.Seq + 1
-		}
-		return entry, true
-	}
-	return nil, false
+	q.fakeRead()
+	return q.out
 }
 
 func (q *Queue) ack(seq uint64) {
@@ -55,20 +54,66 @@ func (q *Queue) ack(seq uint64) {
 	q.entries = q.entries[acked:]
 }
 
+func (q *Queue) fakeRead() {
+	select {
+	case <-q.out:
+	default:
+	}
+}
+
+func (q *Queue) loop() {
+	var in chan interface{}
+	var out chan *Entry
+
+	in = q.in
+
+	for {
+		var entry *Entry
+		if len(q.entries) > 0 {
+			out = q.out
+			entry = q.entries[0]
+		} else {
+			out = nil
+		}
+
+		if in == nil && out == nil {
+			close(q.out)
+			return
+		}
+
+		select {
+		case i, ok := <-in:
+			if ok {
+				q.push(i)
+			} else {
+				in = nil
+			}
+		case out <- entry:
+			q.unacknowledgedSeq = entry.Seq + 1
+			continue
+		}
+	}
+}
+
+func (q *Queue) push(i interface{}) {
+	e := Entry{
+		Seq:   q.nextSeq,
+		Value: i,
+	}
+	q.nextSeq++
+	q.entries = append(q.entries, &e)
+}
+
 func seqdiff(a, b uint64) uint64 {
 	if a <= b {
 		return b - a
-	} else {
-		return math.MaxUint64 - (a - b + 1)
 	}
+	return math.MaxUint64 - (a - b + 1)
 }
 
 func inseq(a, b, seq uint64) bool {
 	if a <= b {
 		return a <= seq && seq < b
-	} else {
-		return a <= seq || seq < b
 	}
+	return a <= seq || seq < b
 }
-
-// TODO: chan part...

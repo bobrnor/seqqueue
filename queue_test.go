@@ -15,8 +15,42 @@ func isEqual(a, b *Queue) bool {
 	return a.nextSeq == b.nextSeq && a.unacknowledgedSeq == b.unacknowledgedSeq && reflect.DeepEqual(a.entries, b.entries)
 }
 
+func TestDispose0(t *testing.T) {
+	q := NewQueue()
+	q.Dispose()
+
+	_, okIn := <-q.in
+	_, okOut := <-q.out
+	if okIn || okOut {
+		t.Errorf("Dispose does not dispose queue channels %+v", q)
+	}
+}
+
+func TestDispose1(t *testing.T) {
+	q := NewQueue()
+	q.In() <- 127
+	q.Dispose()
+
+	_, okIn := <-q.in
+	_, okOut := <-q.out
+	if okIn || !okOut {
+		t.Errorf("Dispose sould not dispose out channel if where are entries in queue %+v", q)
+	}
+
+	v, ok := <-q.Out(0)
+	if ok {
+		t.Errorf("Read something when shouldn't %+v %+v", q, v)
+	}
+
+	_, okIn = <-q.in
+	_, okOut = <-q.out
+	if okIn || okOut {
+		t.Errorf("Dispose does not dispose out channel after reading all entries %+v", q)
+	}
+}
+
 func TestPush0(t *testing.T) {
-	found := Queue{}
+	found := NewQueue()
 	expected := Queue{
 		nextSeq:           1,
 		unacknowledgedSeq: 0,
@@ -27,10 +61,10 @@ func TestPush0(t *testing.T) {
 			},
 		},
 	}
-	found.Push(127)
+	found.In() <- 127
 
-	if !isEqual(&expected, &found) {
-		t.Errorf("Expected: %+v,\nfound: %+v", description(&expected), description(&found))
+	if !isEqual(&expected, found) {
+		t.Errorf("Expected: %+v,\nfound: %+v", description(&expected), description(found))
 	}
 }
 
@@ -46,47 +80,20 @@ func TestPop0(t *testing.T) {
 			expectedEntry,
 		},
 	}
-	found := Queue{
-		nextSeq:           1,
-		unacknowledgedSeq: 0,
-		entries: []*Entry{
-			expectedEntry,
-		},
-	}
-	entry, ok := found.Pop(0)
+	found := NewQueue()
+	found.In() <- 127
+	entry, ok := <-found.Out(0)
 
 	if !ok {
-		t.Errorf("Bad pop %+v", description(&found))
+		t.Errorf("Bad pop %+v", description(found))
 	}
 
 	if !reflect.DeepEqual(entry, expectedEntry) {
 		t.Errorf("Pop returns bad Entry %+v", entry)
 	}
 
-	if !isEqual(&expected, &found) {
-		t.Errorf("Expected: %+v,\nfound: %+v", description(&expected), description(&found))
-	}
-}
-
-func TestPop1(t *testing.T) {
-	expected := Queue{
-		nextSeq:           1,
-		unacknowledgedSeq: 0,
-		entries:           []*Entry{},
-	}
-	found := Queue{
-		nextSeq:           1,
-		unacknowledgedSeq: 0,
-		entries:           []*Entry{},
-	}
-	entry, ok := found.Pop(0)
-
-	if ok {
-		t.Errorf("Bad pop %+v %+v", description(&found), entry)
-	}
-
-	if !isEqual(&expected, &found) {
-		t.Errorf("Expected: %+v,\nfound: %+v", description(&expected), description(&found))
+	if !isEqual(&expected, found) {
+		t.Errorf("Expected: %+v,\nfound: %+v", description(&expected), description(found))
 	}
 }
 
@@ -137,6 +144,25 @@ func TestAck1(t *testing.T) {
 	}
 
 	found.ack(1)
+
+	if !isEqual(&expected, &found) {
+		t.Errorf("Expected: %+v,\nfound: %+v", description(&expected), description(&found))
+	}
+}
+
+func TestAck2(t *testing.T) {
+	expected := Queue{
+		nextSeq:           1,
+		unacknowledgedSeq: 1,
+		entries:           []*Entry{},
+	}
+	found := Queue{
+		nextSeq:           1,
+		unacknowledgedSeq: 1,
+		entries:           []*Entry{},
+	}
+
+	found.ack(0)
 
 	if !isEqual(&expected, &found) {
 		t.Errorf("Expected: %+v,\nfound: %+v", description(&expected), description(&found))
