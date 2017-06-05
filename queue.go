@@ -33,6 +33,10 @@ func (q *Queue) In() chan interface{} {
 	return q.in
 }
 
+func (q *Queue) OutWithoutSeq() <-chan *Entry {
+	return q.out
+}
+
 func (q *Queue) Out(seq uint64) <-chan *Entry {
 	q.ack(seq)
 	q.fakeRead()

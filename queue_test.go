@@ -49,7 +49,7 @@ func TestDispose1(t *testing.T) {
 	}
 }
 
-func TestPush0(t *testing.T) {
+func TestIn0(t *testing.T) {
 	found := NewQueue()
 	expected := Queue{
 		nextSeq:           1,
@@ -68,7 +68,7 @@ func TestPush0(t *testing.T) {
 	}
 }
 
-func TestPop0(t *testing.T) {
+func TestOut0(t *testing.T) {
 	expectedEntry := &Entry{
 		Seq:   0,
 		Value: 127,
@@ -83,6 +83,35 @@ func TestPop0(t *testing.T) {
 	found := NewQueue()
 	found.In() <- 127
 	entry, ok := <-found.Out(0)
+
+	if !ok {
+		t.Errorf("Bad pop %+v", description(found))
+	}
+
+	if !reflect.DeepEqual(entry, expectedEntry) {
+		t.Errorf("Pop returns bad Entry %+v", entry)
+	}
+
+	if !isEqual(&expected, found) {
+		t.Errorf("Expected: %+v,\nfound: %+v", description(&expected), description(found))
+	}
+}
+
+func TestOutWithoutSeq0(t *testing.T) {
+	expectedEntry := &Entry{
+		Seq:   0,
+		Value: 127,
+	}
+	expected := Queue{
+		nextSeq:           1,
+		unacknowledgedSeq: 0,
+		entries: []*Entry{
+			expectedEntry,
+		},
+	}
+	found := NewQueue()
+	found.In() <- 127
+	entry, ok := <-found.OutWithoutSeq()
 
 	if !ok {
 		t.Errorf("Bad pop %+v", description(found))
