@@ -55,7 +55,7 @@ func TestIn0(t *testing.T) {
 		nextSeq:           1,
 		unacknowledgedSeq: 0,
 		entries: []*Entry{
-			&Entry{
+			{
 				Seq:   0,
 				Value: 127,
 			},
