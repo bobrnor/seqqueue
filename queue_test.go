@@ -19,8 +19,8 @@ func TestDispose0(t *testing.T) {
 	q := NewQueue()
 	q.Dispose()
 
-	_, okIn := <-q.in
-	_, okOut := <-q.out
+	_, okIn := <-q.inChan
+	_, okOut := <-q.outChan
 	if okIn || okOut {
 		t.Errorf("Dispose does not dispose queue channels %+v", q)
 	}
@@ -31,8 +31,8 @@ func TestDispose1(t *testing.T) {
 	q.In() <- 127
 	q.Dispose()
 
-	_, okIn := <-q.in
-	_, okOut := <-q.out
+	_, okIn := <-q.inChan
+	_, okOut := <-q.outChan
 	if okIn || !okOut {
 		t.Errorf("Dispose sould not dispose out channel if where are entries in queue %+v", q)
 	}
@@ -42,8 +42,8 @@ func TestDispose1(t *testing.T) {
 		t.Errorf("Read something when shouldn't %+v %+v", q, v)
 	}
 
-	_, okIn = <-q.in
-	_, okOut = <-q.out
+	_, okIn = <-q.inChan
+	_, okOut = <-q.outChan
 	if okIn || okOut {
 		t.Errorf("Dispose does not dispose out channel after reading all entries %+v", q)
 	}
@@ -104,14 +104,13 @@ func TestOutWithoutSeq0(t *testing.T) {
 	}
 	expected := Queue{
 		nextSeq:           1,
-		unacknowledgedSeq: 0,
-		entries: []*Entry{
-			expectedEntry,
-		},
+		unacknowledgedSeq: 1,
+		entries:           []*Entry{},
 	}
 	found := NewQueue()
 	found.In() <- 127
 	entry, ok := <-found.OutWithoutSeq()
+	found.Out(0)
 
 	if !ok {
 		t.Errorf("Bad pop %+v", description(found))

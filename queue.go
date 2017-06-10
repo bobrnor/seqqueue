@@ -2,45 +2,44 @@ package seqqueue
 
 import (
 	"math"
-	"sync"
 )
 
 type Queue struct {
-	sync.Mutex
 	nextSeq           uint64
 	unacknowledgedSeq uint64
 	entries           []*Entry
 
-	in  chan interface{}
-	out chan *Entry
+	inChan  chan interface{}
+	ackChan chan uint64
+	outChan chan *Entry
 }
 
 func NewQueue() *Queue {
 	q := Queue{
 		entries: []*Entry{},
-		in:      make(chan interface{}),
-		out:     make(chan *Entry),
+		inChan:  make(chan interface{}),
+		ackChan: make(chan uint64),
+		outChan: make(chan *Entry),
 	}
 	go q.loop()
 	return &q
 }
 
 func (q *Queue) Dispose() {
-	close(q.in)
+	close(q.inChan)
 }
 
 func (q *Queue) In() chan interface{} {
-	return q.in
+	return q.inChan
 }
 
 func (q *Queue) OutWithoutSeq() <-chan *Entry {
-	return q.out
+	return q.outChan
 }
 
 func (q *Queue) Out(seq uint64) <-chan *Entry {
-	q.ack(seq)
-	q.fakeRead()
-	return q.out
+	q.ackChan <- seq
+	return q.outChan
 }
 
 func (q *Queue) ack(seq uint64) {
@@ -58,30 +57,24 @@ func (q *Queue) ack(seq uint64) {
 	q.entries = q.entries[acked:]
 }
 
-func (q *Queue) fakeRead() {
-	select {
-	case <-q.out:
-	default:
-	}
-}
-
 func (q *Queue) loop() {
 	var in chan interface{}
 	var out chan *Entry
 
-	in = q.in
+	in = q.inChan
 
 	for {
 		var entry *Entry
 		if len(q.entries) > 0 {
-			out = q.out
+			out = q.outChan
 			entry = q.entries[0]
 		} else {
 			out = nil
 		}
 
 		if in == nil && out == nil {
-			close(q.out)
+			close(q.ackChan)
+			close(q.outChan)
 			return
 		}
 
@@ -91,6 +84,10 @@ func (q *Queue) loop() {
 				q.push(i)
 			} else {
 				in = nil
+			}
+		case seq, ok := <-q.ackChan:
+			if ok {
+				q.ack(seq)
 			}
 		case out <- entry:
 			q.unacknowledgedSeq = entry.Seq + 1
